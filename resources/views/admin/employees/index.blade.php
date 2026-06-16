@@ -1,39 +1,39 @@
 @extends('layouts.admin')
 
-@section('title', 'Funcionarios | Act Coffee')
+@section('title', 'Funcionários | Act Coffee')
 
 @section('content')
 <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
     <div>
-        <h1 class="text-3xl font-black text-zinc-950">Funcionarios</h1>
-        <p class="mt-1 text-sm text-zinc-500">Fila atual de participantes.</p>
+        <h1 class="text-3xl font-black text-act-neutral">Funcionários</h1>
+        <p class="mt-1 text-sm text-act-muted">Fila atual de participantes.</p>
     </div>
-    <a href="{{ route('admin.funcionarios.create') }}" class="rounded-md bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-800">Novo funcionario</a>
+    <a href="{{ route('admin.funcionarios.create') }}" class="rounded-md bg-act-primary px-4 py-2 text-sm font-bold text-white hover:bg-act-primary-dark">Novo funcionário</a>
 </div>
 
-<div class="overflow-hidden rounded-md border border-zinc-200 bg-white">
+<div class="overflow-hidden rounded-md border border-act-line bg-white">
     <table class="w-full text-left text-sm">
-        <thead class="bg-zinc-100 text-xs uppercase text-zinc-500">
+        <thead class="bg-act-primary-light text-xs uppercase text-act-muted">
             <tr>
                 <th class="px-4 py-3">Fila</th>
                 <th class="px-4 py-3">Nome</th>
                 <th class="px-4 py-3">Status</th>
-                <th class="px-4 py-3">Contratacao</th>
-                <th class="px-4 py-3 text-right">Acoes</th>
+                <th class="px-4 py-3">Contratação</th>
+                <th class="px-4 py-3 text-right">Ações</th>
             </tr>
         </thead>
-        <tbody class="divide-y divide-zinc-200">
+        <tbody class="divide-y divide-act-line">
             @foreach ($employees as $employee)
                 <tr>
-                    <td class="px-4 py-3 font-semibold text-zinc-700">{{ $employee->queue_position }}</td>
-                    <td class="px-4 py-3 font-medium text-zinc-950">{{ $employee->name }}</td>
+                    <td class="px-4 py-3 font-semibold text-act-muted">{{ $employee->queue_position }}</td>
+                    <td class="px-4 py-3 font-medium text-act-neutral">{{ $employee->name }}</td>
                     <td class="px-4 py-3">
-                        <span class="rounded-full border px-2.5 py-1 text-xs font-semibold {{ $employee->active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-zinc-200 bg-zinc-50 text-zinc-600' }}">{{ $employee->active ? 'Ativo' : 'Inativo' }}</span>
+                        <span class="rounded-full border px-2.5 py-1 text-xs font-semibold {{ $employee->active ? 'border-act-primary-light bg-act-primary-light text-act-primary-dark' : 'border-act-line bg-act-bg text-act-muted' }}">{{ $employee->active ? 'Ativo' : 'Inativo' }}</span>
                     </td>
-                    <td class="px-4 py-3 text-zinc-500">{{ $employee->hired_at?->format('d/m/Y') ?? '-' }}</td>
+                    <td class="px-4 py-3 text-act-muted">{{ $employee->hired_at?->format('d/m/Y') ?? '-' }}</td>
                     <td class="px-4 py-3">
                         <div class="flex justify-end gap-2">
-                            <a href="{{ route('admin.funcionarios.edit', $employee) }}" class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100">Editar</a>
+                            <a href="{{ route('admin.funcionarios.edit', $employee) }}" class="rounded-md border border-act-line px-3 py-1.5 text-sm font-semibold text-act-muted hover:bg-act-primary-light">Editar</a>
                             @if ($employee->active)
                                 <form method="POST" action="{{ route('admin.funcionarios.deactivate', $employee) }}">
                                     @csrf

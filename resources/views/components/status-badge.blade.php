@@ -3,13 +3,13 @@
 @php
     $labels = [
         'scheduled' => 'Agendado',
-        'completed' => 'Concluido',
+        'completed' => 'Concluído',
     ];
 
     $classes = [
-        'scheduled' => 'border-sky-200 bg-sky-50 text-sky-700',
-        'completed' => 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    ][$status] ?? 'border-zinc-200 bg-zinc-50 text-zinc-700';
+        'scheduled' => 'border-act-primary-light bg-act-primary-light text-act-primary-dark',
+        'completed' => 'border-act-accent/30 bg-act-accent/10 text-act-accent',
+    ][$status] ?? 'border-act-line bg-act-bg text-act-muted';
 @endphp
 
 <span {{ $attributes->merge(['class' => 'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold '.$classes]) }}>

@@ -1,37 +1,37 @@
 @extends('layouts.admin')
 
-@section('title', 'Ferias | Act Coffee')
+@section('title', 'Férias | Act Coffee')
 
 @section('content')
 <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
     <div>
-        <h1 class="text-3xl font-black text-zinc-950">Ferias</h1>
-        <p class="mt-1 text-sm text-zinc-500">Periodos que pulam a pessoa apenas no dia da vez.</p>
+        <h1 class="text-3xl font-black text-act-neutral">Férias</h1>
+        <p class="mt-1 text-sm text-act-muted">Períodos que pulam a pessoa apenas no dia da vez.</p>
     </div>
-    <a href="{{ route('admin.ferias.create') }}" class="rounded-md bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-800">Nova ferias</a>
+    <a href="{{ route('admin.ferias.create') }}" class="rounded-md bg-act-primary px-4 py-2 text-sm font-bold text-white hover:bg-act-primary-dark">Novo período de férias</a>
 </div>
 
-<div class="overflow-hidden rounded-md border border-zinc-200 bg-white">
+<div class="overflow-hidden rounded-md border border-act-line bg-white">
     <table class="w-full text-left text-sm">
-        <thead class="bg-zinc-100 text-xs uppercase text-zinc-500">
+        <thead class="bg-act-primary-light text-xs uppercase text-act-muted">
             <tr>
-                <th class="px-4 py-3">Funcionario</th>
-                <th class="px-4 py-3">Inicio</th>
+                <th class="px-4 py-3">Funcionário</th>
+                <th class="px-4 py-3">Início</th>
                 <th class="px-4 py-3">Fim</th>
                 <th class="px-4 py-3">Motivo</th>
-                <th class="px-4 py-3 text-right">Acoes</th>
+                <th class="px-4 py-3 text-right">Ações</th>
             </tr>
         </thead>
-        <tbody class="divide-y divide-zinc-200">
+        <tbody class="divide-y divide-act-line">
             @forelse ($vacations as $vacation)
                 <tr>
-                    <td class="px-4 py-3 font-medium text-zinc-950">{{ $vacation->employee->name }}</td>
-                    <td class="px-4 py-3 text-zinc-700">{{ $vacation->start_date->format('d/m/Y') }}</td>
-                    <td class="px-4 py-3 text-zinc-700">{{ $vacation->end_date->format('d/m/Y') }}</td>
-                    <td class="px-4 py-3 text-zinc-500">{{ $vacation->reason ?? '-' }}</td>
+                    <td class="px-4 py-3 font-medium text-act-neutral">{{ $vacation->employee->name }}</td>
+                    <td class="px-4 py-3 text-act-muted">{{ $vacation->start_date->format('d/m/Y') }}</td>
+                    <td class="px-4 py-3 text-act-muted">{{ $vacation->end_date->format('d/m/Y') }}</td>
+                    <td class="px-4 py-3 text-act-muted">{{ $vacation->reason ?? '-' }}</td>
                     <td class="px-4 py-3">
                         <div class="flex justify-end gap-2">
-                            <a href="{{ route('admin.ferias.edit', $vacation) }}" class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100">Editar</a>
+                            <a href="{{ route('admin.ferias.edit', $vacation) }}" class="rounded-md border border-act-line px-3 py-1.5 text-sm font-semibold text-act-muted hover:bg-act-primary-light">Editar</a>
                             <form method="POST" action="{{ route('admin.ferias.destroy', $vacation) }}">
                                 @csrf
                                 @method('DELETE')
@@ -41,7 +41,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td class="px-4 py-6 text-zinc-500" colspan="5">Nenhuma ferias cadastrada.</td></tr>
+                <tr><td class="px-4 py-6 text-act-muted" colspan="5">Nenhum período de férias cadastrado.</td></tr>
             @endforelse
         </tbody>
     </table>
