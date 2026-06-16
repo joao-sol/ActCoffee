@@ -4,13 +4,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Admin | Act Coffee')</title>
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/act-coffee-logo.png') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-act-bg text-act-neutral antialiased">
     <header class="border-b border-act-line bg-white">
         <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3">
-                <span class="flex size-10 items-center justify-center rounded-md bg-act-primary text-sm font-black text-white">AC</span>
+                <span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-act-line bg-white p-0.5">
+                    <img src="{{ asset('images/act-coffee-logo.png') }}" alt="Act Coffee" class="h-9 w-9 object-contain">
+                </span>
                 <span>
                     <span class="block text-base font-bold leading-tight">Act Coffee</span>
                     <span class="block text-xs text-act-muted">Painel administrativo</span>

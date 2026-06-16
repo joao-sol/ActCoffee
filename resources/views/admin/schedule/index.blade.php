@@ -3,6 +3,10 @@
 @section('title', 'Escala Admin | Act Coffee')
 
 @section('content')
+@php
+    $selectedSwapIds = collect(old('replacement_employee_ids', []))->map(fn ($id) => (int) $id)->all();
+@endphp
+
 <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
     <div>
         <h1 class="text-3xl font-black text-act-neutral">Escala</h1>
@@ -11,7 +15,7 @@
 </div>
 
 <section class="mb-8 rounded-md border border-act-line bg-white p-5">
-    <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
             <p class="text-sm font-semibold uppercase tracking-wide text-act-primary-dark">Hoje - {{ $today->format('d/m/Y') }}</p>
             @if ($todayStatus['type'] === 'duty')
@@ -28,20 +32,55 @@
         </div>
 
         @if ($todayStatus['type'] === 'duty')
-            <div class="flex flex-wrap gap-3">
-                <form method="POST" action="{{ route('admin.escala.complete', $today->toDateString()) }}">
-                    @csrf
-                    @method('PATCH')
-                    <button type="submit" @disabled($todayStatus['status'] === 'completed') class="rounded-md bg-act-accent px-4 py-2 text-sm font-bold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:bg-slate-300">Concluir</button>
-                </form>
-                <form method="POST" action="{{ route('admin.escala.swap', $today->toDateString()) }}">
-                    @csrf
-                    @method('PATCH')
-                    <button type="submit" @disabled($todayStatus['status'] === 'completed') class="rounded-md border border-act-primary-light bg-act-primary-light px-4 py-2 text-sm font-bold text-act-primary-dark hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-act-line disabled:bg-act-primary-light disabled:text-slate-400">Trocar</button>
-                </form>
-            </div>
+            <form method="POST" action="{{ route('admin.escala.complete', $today->toDateString()) }}">
+                @csrf
+                @method('PATCH')
+                <button type="submit" @disabled($todayStatus['status'] === 'completed') class="rounded-md bg-act-accent px-4 py-2 text-sm font-bold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:bg-slate-300">Concluir</button>
+            </form>
         @endif
     </div>
+
+    @if ($todayStatus['type'] === 'duty')
+        <div class="mt-6 border-t border-act-line pt-5">
+            @if ($todayStatus['status'] === 'completed')
+                <p class="text-sm text-act-muted">A lavagem de hoje já foi concluída. A troca não pode mais alterar este dia.</p>
+            @elseif ($swapCandidates->isEmpty())
+                <p class="text-sm text-act-muted">Não há outro funcionário ativo e disponível para assumir hoje.</p>
+            @else
+                <form method="POST" action="{{ route('admin.escala.swap', $today->toDateString()) }}" class="space-y-4">
+                    @csrf
+                    @method('PATCH')
+
+                    <div>
+                        <h3 class="text-sm font-bold text-act-neutral">Selecionar substituto</h3>
+                        <p class="mt-1 text-sm text-act-muted">Escolha uma pessoa disponível para trocar com o responsável de hoje.</p>
+                    </div>
+
+                    @error('replacement_employee_ids')
+                        <p class="text-sm text-rose-700">{{ $message }}</p>
+                    @enderror
+
+                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        @foreach ($swapCandidates as $candidate)
+                            <label class="flex cursor-pointer items-center gap-3 rounded-md border border-act-line bg-act-bg px-3 py-2 text-sm font-semibold text-act-neutral hover:border-act-primary hover:bg-act-primary-light">
+                                <input
+                                    type="checkbox"
+                                    name="replacement_employee_ids[]"
+                                    value="{{ $candidate->id }}"
+                                    data-swap-checkbox
+                                    @checked(in_array($candidate->id, $selectedSwapIds, true))
+                                    class="rounded border-act-line text-act-primary focus:ring-act-primary"
+                                >
+                                <span>{{ $candidate->name }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+
+                    <button type="submit" class="rounded-md border border-act-primary-light bg-act-primary-light px-4 py-2 text-sm font-bold text-act-primary-dark hover:bg-blue-100">Trocar com selecionado</button>
+                </form>
+            @endif
+        </div>
+    @endif
 </section>
 
 <div class="overflow-hidden rounded-md border border-act-line bg-white">

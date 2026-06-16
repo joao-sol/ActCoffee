@@ -28,12 +28,12 @@ Equipes internas que compartilham uma cafeteira e precisam dividir a responsabil
 - Feriados móveis calculados a partir da Páscoa pelo algoritmo de Meeus.
 - Feriados locais de Guarapuava em 09/12.
 - Botão para marcar a lavagem como concluída.
-- Botão para trocar o responsável do dia pelo próximo funcionário disponível.
+- Seleção do funcionário que irá trocar com o responsável do dia.
 - Testes automatizados para as principais regras de negócio.
 
 ## Print da tela mais interessante
 
-![Tela pública do Act Coffee](public/images/coffee-station.png)
+![Tela pública do Act Coffee](public/images/Print.png)
 
 ## Requisitos
 
@@ -128,14 +128,10 @@ Os testes cobrem:
 - Inserir novo funcionário no final da fila.
 - Pular funcionário em férias apenas quando sua vez cai no período.
 - Manter a ordem da fila após férias.
-- Trocar responsável do dia pelo próximo disponível.
+- Trocar responsável do dia por um funcionário disponível selecionado.
 - Marcar lavagem como concluída.
 - Limpar histórico com mais de 30 dias.
 - Proteger a área administrativa com login.
-
-## CI
-
-O workflow `.github/workflows/tests.yml` instala dependências PHP e JS, prepara SQLite, gera a chave da aplicação, roda migrations, compila assets e executa `php artisan test`.
 
 ## Melhorias futuras
 

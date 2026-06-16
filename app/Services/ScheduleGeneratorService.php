@@ -7,6 +7,7 @@ use App\Models\Employee;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class ScheduleGeneratorService
@@ -38,7 +39,7 @@ class ScheduleGeneratorService
             : $start->copy();
 
         $queueIndex = $lastDuty
-            ? $this->nextIndexAfterEmployee($activeQueue, $lastDuty->employee_id)
+            ? $this->nextIndexAfterEmployee($activeQueue, $this->queueEmployeeIdForDuty($lastDuty))
             : 0;
 
         $entries = collect();
@@ -112,7 +113,10 @@ class ScheduleGeneratorService
             ->first();
 
         if ($existing !== null) {
-            return $existing->load(['employee', 'originalEmployee']);
+            $existing = $existing->load(['employee', 'originalEmployee']);
+            $this->ensureSwapCounterpart($existing);
+
+            return $existing->refresh()->load(['employee', 'originalEmployee']);
         }
 
         $entry = $this->generate($date, $date)->first();
@@ -141,49 +145,125 @@ class ScheduleGeneratorService
         return $duty->refresh()->load(['employee', 'originalEmployee']);
     }
 
+    public function getSwapCandidates(CoffeeDuty $duty): Collection
+    {
+        $date = $duty->duty_date->copy()->startOfDay();
+        $activeQueue = $this->queue->getActiveQueue()->values();
+        $originalEmployeeId = $this->queueEmployeeIdForDuty($duty);
+        $currentIndex = $activeQueue->search(fn (Employee $employee): bool => $employee->id === $originalEmployeeId);
+
+        $orderedCandidates = $currentIndex === false
+            ? $activeQueue
+            : $activeQueue->slice($currentIndex + 1)->concat($activeQueue->slice(0, $currentIndex))->values();
+
+        return $orderedCandidates
+            ->filter(fn (Employee $employee): bool => $employee->id !== $duty->employee_id)
+            ->filter(fn (Employee $employee): bool => $employee->id !== $originalEmployeeId)
+            ->filter(fn (Employee $employee): bool => $this->isEmployeeAvailable($employee, $date))
+            ->values();
+    }
+
     public function swapDuty(CoffeeDuty $duty): CoffeeDuty
     {
+        $replacement = $this->getSwapCandidates($duty)->first();
+
+        if ($replacement === null) {
+            throw new RuntimeException('Nenhum funcionário disponível para assumir hoje.');
+        }
+
+        return $this->swapDutyWith($duty, $replacement);
+    }
+
+    public function swapDutyWith(CoffeeDuty $duty, Employee $replacement): CoffeeDuty
+    {
         if ($duty->status === CoffeeDuty::STATUS_COMPLETED) {
-            throw new RuntimeException('Lavagem ja concluida. A troca nao pode mais alterar este dia.');
+            throw new RuntimeException('Lavagem já concluída. A troca não pode mais alterar este dia.');
         }
 
         $date = $duty->duty_date->copy()->startOfDay();
-        $activeQueue = $this->queue->getActiveQueue()->values();
+        $originalEmployee = Employee::find($this->queueEmployeeIdForDuty($duty));
 
-        if ($activeQueue->count() < 2) {
-            throw new RuntimeException('E preciso ter ao menos dois funcionarios ativos para trocar a escala.');
+        if ($originalEmployee === null) {
+            throw new RuntimeException('Não existe responsável original para trocar esta data.');
         }
 
-        $currentIndex = $activeQueue->search(fn (Employee $employee): bool => $employee->id === $duty->employee_id);
-        $queueIndex = $currentIndex === false ? 0 : ($currentIndex + 1) % $activeQueue->count();
-        $replacement = null;
+        if ($replacement->id === $duty->employee_id || $replacement->id === $originalEmployee->id) {
+            throw new RuntimeException('Selecione uma pessoa diferente da responsável atual.');
+        }
 
-        for ($attempts = 0; $attempts < $activeQueue->count(); $attempts++) {
-            $employee = $activeQueue[$queueIndex];
-            $queueIndex = ($queueIndex + 1) % $activeQueue->count();
+        if (! $replacement->active) {
+            throw new RuntimeException('O funcionário selecionado não participa das próximas escalas.');
+        }
 
-            if ($employee->id === $duty->employee_id) {
-                continue;
+        if ($replacement->isOnVacation($date)) {
+            throw new RuntimeException('O funcionário selecionado está em férias nesta data.');
+        }
+
+        return DB::transaction(function () use ($duty, $replacement, $originalEmployee, $date): CoffeeDuty {
+            $previousReplacementId = $duty->employee_id;
+
+            if ($previousReplacementId !== null && $previousReplacementId !== $originalEmployee->id) {
+                $this->removePendingCounterpartSwap($date, $originalEmployee, $previousReplacementId);
             }
 
-            if ($this->isEmployeeAvailable($employee, $date)) {
-                $replacement = $employee;
-                break;
+            $targetEntry = $this->findNextNaturalDutyForEmployee($replacement, $date);
+
+            if ($targetEntry === null) {
+                throw new RuntimeException('Não foi possível encontrar a próxima data desse funcionário para concluir a troca.');
             }
+
+            $targetDate = $targetEntry['date']->copy()->startOfDay();
+            $targetDuty = $targetEntry['duty'];
+
+            if ($targetDuty instanceof CoffeeDuty && $targetDuty->employee_id !== $replacement->id) {
+                throw new RuntimeException('A próxima data desse funcionário já possui uma troca registrada.');
+            }
+
+            $this->recordCounterpartSwap($targetDate, $originalEmployee, $replacement, $targetDuty);
+
+            $duty->update([
+                'original_employee_id' => $originalEmployee->id,
+                'employee_id' => $replacement->id,
+                'status' => CoffeeDuty::STATUS_SCHEDULED,
+                'notes' => trim(($duty->notes ? $duty->notes.PHP_EOL : '').'Troca registrada em '.now()->format('d/m/Y H:i').' com '.$replacement->name.'. '.$originalEmployee->name.' assumiu o dia de '.$replacement->name.' em '.$targetDate->format('d/m/Y').'.'),
+            ]);
+
+            return $duty->refresh()->load(['employee', 'originalEmployee']);
+        });
+    }
+
+    public function ensureSwapCounterpart(CoffeeDuty $duty): void
+    {
+        if ($duty->employee_id === null || $duty->original_employee_id === null || $duty->employee_id === $duty->original_employee_id) {
+            return;
         }
 
-        if ($replacement === null) {
-            throw new RuntimeException('Nenhum proximo funcionario disponivel para assumir hoje.');
+        if ($this->hasPreviousMirrorSwap($duty) || $this->hasFutureMirrorSwap($duty)) {
+            return;
         }
 
-        $duty->update([
-            'original_employee_id' => $duty->original_employee_id ?? $duty->employee_id,
-            'employee_id' => $replacement->id,
-            'status' => CoffeeDuty::STATUS_SCHEDULED,
-            'notes' => trim(($duty->notes ? $duty->notes.PHP_EOL : '').'Troca registrada em '.now()->format('d/m/Y H:i').'.'),
-        ]);
+        $originalEmployee = $duty->originalEmployee ?? Employee::find($duty->original_employee_id);
+        $replacement = $duty->employee ?? Employee::find($duty->employee_id);
 
-        return $duty->refresh()->load(['employee', 'originalEmployee']);
+        if ($originalEmployee === null || $replacement === null || ! $replacement->active) {
+            return;
+        }
+
+        $targetEntry = $this->findNextNaturalDutyForEmployee($replacement, $duty->duty_date);
+
+        if ($targetEntry === null) {
+            return;
+        }
+
+        $targetDuty = $targetEntry['duty'];
+
+        if ($targetDuty instanceof CoffeeDuty && ($targetDuty->status === CoffeeDuty::STATUS_COMPLETED || $targetDuty->employee_id !== $replacement->id)) {
+            return;
+        }
+
+        DB::transaction(function () use ($targetEntry, $originalEmployee, $replacement, $targetDuty): void {
+            $this->recordCounterpartSwap($targetEntry['date']->copy()->startOfDay(), $originalEmployee, $replacement, $targetDuty);
+        });
     }
 
     public function isBusinessDay(CarbonInterface $date): bool
@@ -203,7 +283,7 @@ class ScheduleGeneratorService
             ->first();
 
         if ($existing !== null) {
-            $queueIndex = $this->nextIndexAfterEmployee($activeQueue, $existing->employee_id, $queueIndex);
+            $queueIndex = $this->nextIndexAfterEmployee($activeQueue, $this->queueEmployeeIdForDuty($existing), $queueIndex);
 
             return $this->entryFromDuty($date, $existing);
         }
@@ -234,6 +314,83 @@ class ScheduleGeneratorService
             'duty' => $duty,
             'original_employee' => $duty->originalEmployee,
         ];
+    }
+
+    private function queueEmployeeIdForDuty(CoffeeDuty $duty): ?int
+    {
+        return $duty->original_employee_id ?? $duty->employee_id;
+    }
+
+    private function findNextNaturalDutyForEmployee(Employee $employee, CarbonInterface $afterDate): ?array
+    {
+        $start = Carbon::parse($afterDate)->addDay()->startOfDay();
+        $entries = $this->generate($start, $start->copy()->addYear());
+
+        return $entries->first(function (array $entry) use ($employee): bool {
+            $duty = $entry['duty'];
+            $employeeId = $duty instanceof CoffeeDuty
+                ? $this->queueEmployeeIdForDuty($duty)
+                : $entry['employee']->id;
+
+            return $employeeId === $employee->id;
+        });
+    }
+
+    private function removePendingCounterpartSwap(CarbonInterface $date, Employee $originalEmployee, int $previousReplacementId): void
+    {
+        CoffeeDuty::query()
+            ->whereDate('duty_date', '>', $date->toDateString())
+            ->where('employee_id', $originalEmployee->id)
+            ->where('original_employee_id', $previousReplacementId)
+            ->where('status', CoffeeDuty::STATUS_SCHEDULED)
+            ->delete();
+    }
+
+    private function recordCounterpartSwap(CarbonInterface $targetDate, Employee $originalEmployee, Employee $replacement, ?CoffeeDuty $targetDuty): void
+    {
+        if ($targetDuty instanceof CoffeeDuty && $targetDuty->status === CoffeeDuty::STATUS_COMPLETED) {
+            throw new RuntimeException('A próxima data desse funcionário já foi concluída.');
+        }
+
+        $note = 'Troca registrada em '.now()->format('d/m/Y H:i').': '.$originalEmployee->name.' assumiu o dia de '.$replacement->name.'.';
+        $notes = trim((($targetDuty?->notes ?? '') ? $targetDuty->notes.PHP_EOL : '').$note);
+
+        if ($targetDuty instanceof CoffeeDuty) {
+            $targetDuty->update([
+                'employee_id' => $originalEmployee->id,
+                'original_employee_id' => $replacement->id,
+                'status' => CoffeeDuty::STATUS_SCHEDULED,
+                'notes' => $notes,
+            ]);
+
+            return;
+        }
+
+        CoffeeDuty::create([
+            'employee_id' => $originalEmployee->id,
+            'original_employee_id' => $replacement->id,
+            'duty_date' => Carbon::parse($targetDate)->toDateString(),
+            'status' => CoffeeDuty::STATUS_SCHEDULED,
+            'notes' => $notes,
+        ]);
+    }
+
+    private function hasPreviousMirrorSwap(CoffeeDuty $duty): bool
+    {
+        return CoffeeDuty::query()
+            ->whereDate('duty_date', '<', $duty->duty_date->toDateString())
+            ->where('employee_id', $duty->original_employee_id)
+            ->where('original_employee_id', $duty->employee_id)
+            ->exists();
+    }
+
+    private function hasFutureMirrorSwap(CoffeeDuty $duty): bool
+    {
+        return CoffeeDuty::query()
+            ->whereDate('duty_date', '>', $duty->duty_date->toDateString())
+            ->where('employee_id', $duty->original_employee_id)
+            ->where('original_employee_id', $duty->employee_id)
+            ->exists();
     }
 
     private function getNextAvailableEmployee(CarbonInterface $date, Collection $activeQueue, int &$queueIndex): ?Employee
