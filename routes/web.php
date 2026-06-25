@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PublicScheduleController::class, 'index'])->name('home');
 Route::get('/escala', [PublicScheduleController::class, 'schedule'])->name('schedule');
+Route::patch('/escala/{date}/concluir', [PublicScheduleController::class, 'complete'])->name('schedule.complete');
+Route::patch('/escala/{date}/trocar', [PublicScheduleController::class, 'swap'])->name('schedule.swap');
 Route::get('/historico', [PublicScheduleController::class, 'history'])->name('history');
 
 Route::middleware('guest')->group(function (): void {

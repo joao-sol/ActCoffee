@@ -33,6 +33,9 @@
     </header>
 
     <main>
+        <div class="mx-auto max-w-6xl px-4 pt-4 sm:px-6 lg:px-8">
+            <x-flash />
+        </div>
         @yield('content')
     </main>
 </body>

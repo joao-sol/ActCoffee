@@ -3,6 +3,10 @@
 @section('title', 'Act Coffee')
 
 @section('content')
+@php
+    $selectedSwapIds = collect(old('replacement_employee_ids', []))->map(fn ($id) => (int) $id)->all();
+@endphp
+
 <section class="relative isolate overflow-hidden border-b border-act-line bg-act-neutral">
     <img class="absolute inset-0 -z-20 h-full w-full object-cover" src="{{ asset('images/coffee-station.png') }}" alt="Cafeteira em uma cozinha corporativa com identidade visual tecnológica">
     <div class="absolute inset-0 -z-10 bg-linear-to-r from-white via-white/90 to-white/15"></div>
@@ -18,6 +22,47 @@
                     <x-status-badge :status="$todayStatus['status']" />
                     @if ($todayStatus['original_employee'])
                         <span class="rounded-full border border-act-primary-light bg-act-primary-light px-3 py-1 text-xs font-semibold text-act-primary-dark">Troca de {{ $todayStatus['original_employee']->name }}</span>
+                    @endif
+                </div>
+
+                <div class="mt-6 max-w-xl space-y-4">
+                    @if ($todayStatus['status'] === 'completed')
+                        <p class="text-sm font-semibold text-act-muted">Lavagem de hoje concluída.</p>
+                    @else
+                        <form method="POST" action="{{ route('schedule.complete', $today->toDateString()) }}" onsubmit="return confirm('Confirmar conclusão da lavagem de hoje?')">
+                            @csrf
+                            @method('PATCH')
+                            <button type="submit" class="rounded-md bg-act-accent px-4 py-2 text-sm font-bold text-white hover:bg-green-600">Concluir</button>
+                        </form>
+
+                        @if ($swapCandidates->isNotEmpty())
+                            <form method="POST" action="{{ route('schedule.swap', $today->toDateString()) }}" class="space-y-3" onsubmit="return confirm('Confirmar troca com a pessoa selecionada?')">
+                                @csrf
+                                @method('PATCH')
+
+                                @error('replacement_employee_ids')
+                                    <p class="text-sm text-rose-700">{{ $message }}</p>
+                                @enderror
+
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach ($swapCandidates as $candidate)
+                                        <label class="flex cursor-pointer items-center gap-2 rounded-md border border-act-line bg-white/85 px-3 py-2 text-sm font-semibold text-act-neutral hover:border-act-primary hover:bg-act-primary-light">
+                                            <input
+                                                type="checkbox"
+                                                name="replacement_employee_ids[]"
+                                                value="{{ $candidate->id }}"
+                                                data-swap-checkbox
+                                                @checked(in_array($candidate->id, $selectedSwapIds, true))
+                                                class="rounded border-act-line text-act-primary focus:ring-act-primary"
+                                            >
+                                            <span>{{ $candidate->name }}</span>
+                                        </label>
+                                    @endforeach
+                                </div>
+
+                                <button type="submit" class="rounded-md border border-act-primary-light bg-act-primary-light px-4 py-2 text-sm font-bold text-act-primary-dark hover:bg-blue-100">Trocar com selecionado</button>
+                            </form>
+                        @endif
                     @endif
                 </div>
             @else
