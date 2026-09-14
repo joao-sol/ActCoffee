@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PublicScheduleController::class, 'index'])->name('home');
 Route::get('/escala', [PublicScheduleController::class, 'schedule'])->name('schedule');
-Route::patch('/escala/{date}/concluir', [PublicScheduleController::class, 'complete'])->name('schedule.complete');
 Route::patch('/escala/{date}/trocar', [PublicScheduleController::class, 'swap'])->name('schedule.swap');
 Route::get('/historico', [PublicScheduleController::class, 'history'])->name('history');
 
@@ -45,6 +44,5 @@ Route::middleware('auth')
             ->parameters(['feriados-personalizados' => 'custom_holiday']);
 
         Route::get('/escala', [AdminScheduleController::class, 'index'])->name('escala.index');
-        Route::patch('/escala/{date}/concluir', [AdminScheduleController::class, 'complete'])->name('escala.complete');
         Route::patch('/escala/{date}/trocar', [AdminScheduleController::class, 'swap'])->name('escala.swap');
     });

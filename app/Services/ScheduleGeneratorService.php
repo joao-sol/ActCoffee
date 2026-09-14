@@ -12,6 +12,8 @@ use RuntimeException;
 
 class ScheduleGeneratorService
 {
+    public const SWAP_WINDOW_BUSINESS_DAYS = 3;
+
     public function __construct(
         private readonly HolidayService $holidays,
         private readonly EmployeeQueueService $queue,
@@ -136,13 +138,73 @@ class ScheduleGeneratorService
         return $duty->load(['employee', 'originalEmployee']);
     }
 
-    public function completeDuty(CoffeeDuty $duty): CoffeeDuty
+    public function completeExpiredDuties(?CarbonInterface $referenceDate = null): int
     {
-        $duty->update([
-            'status' => CoffeeDuty::STATUS_COMPLETED,
-        ]);
+        $today = Carbon::parse($referenceDate ?? Carbon::today())->startOfDay();
+        $completed = 0;
 
-        return $duty->refresh()->load(['employee', 'originalEmployee']);
+        CoffeeDuty::query()
+            ->where('status', CoffeeDuty::STATUS_SCHEDULED)
+            ->whereDate('duty_date', '<', $today->toDateString())
+            ->orderBy('duty_date')
+            ->get()
+            ->each(function (CoffeeDuty $duty) use ($today, &$completed): void {
+                if (! $today->gt($this->swapDeadlineFor($duty->duty_date))) {
+                    return;
+                }
+
+                $duty->update([
+                    'status' => CoffeeDuty::STATUS_COMPLETED,
+                    'notes' => trim(($duty->notes ? $duty->notes.PHP_EOL : '').'Concluída automaticamente em '.now()->format('d/m/Y H:i').'.'),
+                ]);
+
+                $completed++;
+            });
+
+        return $completed;
+    }
+
+    public function swapDeadlineFor(CarbonInterface $dutyDate): Carbon
+    {
+        $deadline = Carbon::parse($dutyDate)->startOfDay();
+        $businessDays = 0;
+
+        while ($businessDays < self::SWAP_WINDOW_BUSINESS_DAYS) {
+            $deadline->addDay();
+
+            if ($this->isBusinessDay($deadline)) {
+                $businessDays++;
+            }
+        }
+
+        return $deadline;
+    }
+
+    public function canSwapDuty(CoffeeDuty $duty, ?CarbonInterface $referenceDate = null): bool
+    {
+        $today = Carbon::parse($referenceDate ?? Carbon::today())->startOfDay();
+
+        return $duty->status === CoffeeDuty::STATUS_SCHEDULED
+            && $duty->duty_date->lte($today)
+            && $today->lte($this->swapDeadlineFor($duty->duty_date));
+    }
+
+    public function getSwappableDuties(?CarbonInterface $referenceDate = null): Collection
+    {
+        $today = Carbon::parse($referenceDate ?? Carbon::today())->startOfDay();
+
+        return CoffeeDuty::with(['employee', 'originalEmployee'])
+            ->where('status', CoffeeDuty::STATUS_SCHEDULED)
+            ->whereDate('duty_date', '<=', $today->toDateString())
+            ->orderByDesc('duty_date')
+            ->get()
+            ->filter(fn (CoffeeDuty $duty): bool => $this->canSwapDuty($duty, $today))
+            ->map(fn (CoffeeDuty $duty): array => [
+                'duty' => $duty,
+                'candidates' => $this->getSwapCandidates($duty),
+                'deadline' => $this->swapDeadlineFor($duty->duty_date),
+            ])
+            ->values();
     }
 
     public function getSwapCandidates(CoffeeDuty $duty): Collection
@@ -176,8 +238,8 @@ class ScheduleGeneratorService
 
     public function swapDutyWith(CoffeeDuty $duty, Employee $replacement): CoffeeDuty
     {
-        if ($duty->status === CoffeeDuty::STATUS_COMPLETED) {
-            throw new RuntimeException('Lavagem já concluída. A troca não pode mais alterar este dia.');
+        if (! $this->canSwapDuty($duty)) {
+            throw new RuntimeException('O prazo de três dias úteis para alterar esta lavagem já terminou.');
         }
 
         $date = $duty->duty_date->copy()->startOfDay();

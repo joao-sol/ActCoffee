@@ -122,7 +122,7 @@ class ScheduleRulesTest extends TestCase
         $this->assertSame(['Ana', 'Joao', 'Carlos', 'Ana', 'Maria'], $entries->pluck('employee.name')->all());
     }
 
-    public function test_it_swaps_today_with_next_available_employee_and_can_complete(): void
+    public function test_it_swaps_today_with_next_available_employee(): void
     {
         Carbon::setTestNow('2026-06-10 09:00:00');
         $ana = $this->employee('Ana', 1);
@@ -137,14 +137,60 @@ class ScheduleRulesTest extends TestCase
         $this->assertSame('Bruno', $swapped->employee->name);
         $this->assertSame($ana->id, $swapped->original_employee_id);
 
-        $completed = $schedule->completeDuty($swapped);
-        $this->assertSame(CoffeeDuty::STATUS_COMPLETED, $completed->status);
+        Carbon::setTestNow();
+    }
+
+    public function test_it_completes_a_duty_only_after_three_business_days(): void
+    {
+        Carbon::setTestNow('2026-06-11 09:00:00');
+        $employee = $this->employee('Ana', 1);
+        $duty = CoffeeDuty::create([
+            'employee_id' => $employee->id,
+            'duty_date' => '2026-06-08',
+        ]);
+
+        $schedule = $this->schedule();
+
+        $this->assertSame('2026-06-11', $schedule->swapDeadlineFor($duty->duty_date)->toDateString());
+        $this->assertSame(0, $schedule->completeExpiredDuties());
+        $this->assertSame(CoffeeDuty::STATUS_SCHEDULED, $duty->refresh()->status);
+
+        Carbon::setTestNow('2026-06-12 00:05:00');
+
+        $this->assertSame(1, $schedule->completeExpiredDuties());
+        $this->assertSame(CoffeeDuty::STATUS_COMPLETED, $duty->refresh()->status);
 
         Carbon::setTestNow();
     }
 
+    public function test_swap_deadline_skips_weekends_and_holidays(): void
+    {
+        CustomHoliday::create([
+            'name' => 'Recesso interno',
+            'date' => '2026-06-10',
+        ]);
+
+        $deadline = $this->schedule()->swapDeadlineFor(Carbon::parse('2026-06-08'));
+
+        $this->assertSame('2026-06-12', $deadline->toDateString());
+    }
+
+    public function test_it_allows_swaps_through_the_third_business_day_and_rejects_them_afterward(): void
+    {
+        $employee = $this->employee('Ana', 1);
+        $duty = CoffeeDuty::create([
+            'employee_id' => $employee->id,
+            'duty_date' => '2026-06-08',
+        ]);
+        $schedule = $this->schedule();
+
+        $this->assertTrue($schedule->canSwapDuty($duty, Carbon::parse('2026-06-11')));
+        $this->assertFalse($schedule->canSwapDuty($duty, Carbon::parse('2026-06-12')));
+    }
+
     public function test_swap_candidates_keep_queue_order_after_current_employee(): void
     {
+        Carbon::setTestNow('2026-06-10 09:00:00');
         $this->employee('Ana', 1);
         $bruno = $this->employee('Bruno', 2);
         $carlos = $this->employee('Carlos', 3);
@@ -163,6 +209,8 @@ class ScheduleRulesTest extends TestCase
 
         $this->assertSame($carlos->id, $swapped->employee_id);
         $this->assertSame($bruno->id, $swapped->original_employee_id);
+
+        Carbon::setTestNow();
     }
 
     public function test_it_swaps_today_with_selected_available_employee(): void

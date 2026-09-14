@@ -13,6 +13,10 @@ class CoffeeDuty extends Model
     public const STATUS_SCHEDULED = 'scheduled';
     public const STATUS_COMPLETED = 'completed';
 
+    protected $attributes = [
+        'status' => self::STATUS_SCHEDULED,
+    ];
+
     protected $fillable = [
         'employee_id',
         'original_employee_id',

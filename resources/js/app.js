@@ -11,7 +11,9 @@ document.addEventListener('change', (event) => {
         return;
     }
 
-    document.querySelectorAll('[data-swap-checkbox]').forEach((checkbox) => {
+    const form = input.closest('[data-swap-form]');
+
+    form?.querySelectorAll('[data-swap-checkbox]').forEach((checkbox) => {
         if (checkbox !== input) {
             checkbox.checked = false;
         }

@@ -3,10 +3,6 @@
 @section('title', 'Act Coffee')
 
 @section('content')
-@php
-    $selectedSwapIds = collect(old('replacement_employee_ids', []))->map(fn ($id) => (int) $id)->all();
-@endphp
-
 <section class="relative isolate overflow-hidden border-b border-act-line bg-act-neutral">
     <img class="absolute inset-0 -z-20 h-full w-full object-cover" src="{{ asset('images/coffee-station.png') }}" alt="Cafeteira em uma cozinha corporativa com identidade visual tecnológica">
     <div class="absolute inset-0 -z-10 bg-linear-to-r from-white via-white/90 to-white/15"></div>
@@ -25,17 +21,6 @@
                     @endif
                 </div>
 
-                <div class="mt-6 max-w-xl">
-                    @if ($todayStatus['status'] === 'completed')
-                        <p class="text-sm font-semibold text-act-muted">Lavagem de hoje concluída.</p>
-                    @else
-                        <form method="POST" action="{{ route('schedule.complete', $today->toDateString()) }}" onsubmit="return confirm('Confirmar conclusão da lavagem de hoje?')">
-                            @csrf
-                            @method('PATCH')
-                            <button type="submit" class="rounded-md bg-act-accent px-4 py-2 text-sm font-bold text-white hover:bg-green-600">Concluir</button>
-                        </form>
-                    @endif
-                </div>
             @else
                 <h1 class="mt-3 text-4xl font-black text-act-neutral sm:text-5xl">{{ $todayStatus['label'] }}</h1>
                 <p class="mt-3 max-w-xl text-lg text-act-muted">Hoje não consome a vez de ninguém.</p>
@@ -43,50 +28,6 @@
         </div>
     </div>
 </section>
-
-@if ($todayStatus['type'] === 'duty')
-    <section class="mx-auto max-w-6xl px-4 pt-8 sm:px-6 lg:px-8">
-        <div class="rounded-md border border-act-line bg-white p-5">
-            @if ($todayStatus['status'] === 'completed')
-                <p class="text-sm text-act-muted">A lavagem de hoje já foi concluída. A troca não pode mais alterar este dia.</p>
-            @elseif ($swapCandidates->isEmpty())
-                <p class="text-sm text-act-muted">Não há outro funcionário ativo e disponível para assumir hoje.</p>
-            @else
-                <form method="POST" action="{{ route('schedule.swap', $today->toDateString()) }}" class="space-y-4" onsubmit="return confirm('Confirmar troca com a pessoa selecionada?')">
-                    @csrf
-                    @method('PATCH')
-
-                    <div>
-                        <h2 class="text-sm font-bold text-act-neutral">Selecionar substituto</h2>
-                        <p class="mt-1 text-sm text-act-muted">Escolha uma pessoa disponível para trocar com o responsável de hoje.</p>
-                    </div>
-
-                    @error('replacement_employee_ids')
-                        <p class="text-sm text-rose-700">{{ $message }}</p>
-                    @enderror
-
-                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        @foreach ($swapCandidates as $candidate)
-                            <label class="flex cursor-pointer items-center gap-3 rounded-md border border-act-line bg-act-bg px-3 py-2 text-sm font-semibold text-act-neutral hover:border-act-primary hover:bg-act-primary-light">
-                                <input
-                                    type="checkbox"
-                                    name="replacement_employee_ids[]"
-                                    value="{{ $candidate->id }}"
-                                    data-swap-checkbox
-                                    @checked(in_array($candidate->id, $selectedSwapIds, true))
-                                    class="rounded border-act-line text-act-primary focus:ring-act-primary"
-                                >
-                                <span>{{ $candidate->name }}</span>
-                            </label>
-                        @endforeach
-                    </div>
-
-                    <button type="submit" class="rounded-md border border-act-primary-light bg-act-primary-light px-4 py-2 text-sm font-bold text-act-primary-dark hover:bg-blue-100">Trocar com selecionado</button>
-                </form>
-            @endif
-        </div>
-    </section>
-@endif
 
 <section class="mx-auto grid max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
     <div>
@@ -131,6 +72,39 @@
                         <x-status-badge :status="$duty->status" />
                     </div>
                     <p class="mt-1 text-sm text-act-muted">{{ $duty->duty_date->format('d/m/Y') }}</p>
+
+                    @if ($historySwapCandidates->has($duty->id) && $historySwapCandidates->get($duty->id)->isNotEmpty())
+                        <form
+                            method="POST"
+                            action="{{ route('schedule.swap', $duty->duty_date->toDateString()) }}"
+                            class="mt-3 border-t border-act-line pt-3"
+                            data-history-swap-form
+                            onsubmit="return confirm('Confirmar troca com a pessoa selecionada?')"
+                        >
+                            @csrf
+                            @method('PATCH')
+                            <input type="hidden" name="swap_date" value="{{ $duty->duty_date->toDateString() }}">
+
+                            <label class="sr-only" for="history-swap-{{ $duty->id }}">Selecionar substituto</label>
+                            <div class="flex items-center gap-2">
+                                <select
+                                    id="history-swap-{{ $duty->id }}"
+                                    name="replacement_employee_ids[]"
+                                    required
+                                    class="min-w-0 flex-1 rounded-md border-act-line bg-act-bg text-sm text-act-neutral focus:border-act-primary focus:ring-act-primary"
+                                >
+                                    <option value="">Trocar com...</option>
+                                    @foreach ($historySwapCandidates->get($duty->id) as $candidate)
+                                        <option
+                                            value="{{ $candidate->id }}"
+                                            @selected(old('swap_date') === $duty->duty_date->toDateString() && (int) old('replacement_employee_ids.0') === $candidate->id)
+                                        >{{ $candidate->name }}</option>
+                                    @endforeach
+                                </select>
+                                <button type="submit" class="shrink-0 rounded-md bg-act-primary px-3 py-2 text-sm font-bold text-white hover:bg-act-primary-dark">Trocar</button>
+                            </div>
+                        </form>
+                    @endif
                 </div>
             @empty
                 <div class="rounded-md border border-act-line bg-white p-4 text-sm text-act-muted">Sem histórico recente.</div>
