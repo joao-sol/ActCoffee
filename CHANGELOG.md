@@ -2,6 +2,13 @@
 
 Todas as alterações relevantes do Act Coffee serão documentadas neste arquivo.
 
+## [1.1.1] - 2026-09-28
+
+### Corrigido
+
+- Continuidade da fila após a inativação de um funcionário que ainda aparece como responsável original em uma troca registrada.
+- Reinício indevido da escala no primeiro funcionário ativo após a remoção de alguém da fila.
+
 ## [1.1.0] - 2026-09-15
 
 ### Adicionado

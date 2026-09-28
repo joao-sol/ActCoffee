@@ -93,6 +93,26 @@ class ScheduleRulesTest extends TestCase
         $this->assertSame('Bruno', $entry['employee']->name);
     }
 
+    public function test_it_continues_after_the_queue_position_of_an_inactive_original_employee(): void
+    {
+        $ana = $this->employee('Ana', 1);
+        $bruno = $this->employee('Bruno', 2, false);
+        $this->employee('Carla', 3);
+
+        CoffeeDuty::create([
+            'employee_id' => $ana->id,
+            'original_employee_id' => $bruno->id,
+            'duty_date' => '2026-06-10',
+        ]);
+
+        $entries = $this->schedule()->generate(
+            Carbon::parse('2026-06-11'),
+            Carbon::parse('2026-06-12'),
+        );
+
+        $this->assertSame(['Carla', 'Ana'], $entries->pluck('employee.name')->all());
+    }
+
     public function test_it_adds_new_employee_to_end_of_queue(): void
     {
         $this->employee('Ana', 1);

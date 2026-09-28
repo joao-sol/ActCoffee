@@ -482,6 +482,18 @@ class ScheduleGeneratorService
         $index = $activeQueue->search(fn (Employee $employee): bool => $employee->id === $employeeId);
 
         if ($index === false) {
+            $queuePosition = Employee::query()
+                ->whereKey($employeeId)
+                ->value('queue_position');
+
+            if ($queuePosition !== null) {
+                $nextActiveIndex = $activeQueue->search(
+                    fn (Employee $employee): bool => $employee->queue_position > $queuePosition
+                );
+
+                return $nextActiveIndex === false ? 0 : $nextActiveIndex;
+            }
+
             return $fallback % $total;
         }
 
