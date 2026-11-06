@@ -20,6 +20,7 @@ class CoffeeDuty extends Model
     protected $fillable = [
         'employee_id',
         'original_employee_id',
+        'covered_employee_id',
         'duty_date',
         'status',
         'notes',
@@ -40,5 +41,10 @@ class CoffeeDuty extends Model
     public function originalEmployee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'original_employee_id');
+    }
+
+    public function coveredEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'covered_employee_id');
     }
 }

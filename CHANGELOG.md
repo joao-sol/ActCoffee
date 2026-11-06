@@ -2,7 +2,17 @@
 
 Todas as alterações relevantes do Act Coffee serão documentadas neste arquivo.
 
-## [1.1.1] - 2026-09-28
+## [1.1.2] - 2026-11-06
+
+### Corrigido
+
+- Troca de um dia que já era pagamento de outra troca: a dívida passa a ficar com quem estava pagando, e não com o dono original do dia.
+- Criação indevida de uma troca automática quando o novo devedor cumpre esse pagamento.
+- Ajuste na escala de produção: Chiara assume o dia de Hellen em 12/11/2026 (antes estava com Victor).
+
+### Alterado
+
+- Nova coluna `covered_employee_id` em `coffee_duties`, que registra de quem era a vez coberta numa troca em cadeia. Requer `php artisan migrate`.
 
 ### Corrigido
 

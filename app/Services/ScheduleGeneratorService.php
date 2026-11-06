@@ -249,7 +249,9 @@ class ScheduleGeneratorService
             throw new RuntimeException('Não existe responsável original para trocar esta data.');
         }
 
-        if ($replacement->id === $duty->employee_id || $replacement->id === $originalEmployee->id) {
+        $coveredEmployee = Employee::find($this->coveredEmployeeIdForSwap($duty)) ?? $originalEmployee;
+
+        if (in_array($replacement->id, [$duty->employee_id, $originalEmployee->id, $coveredEmployee->id], true)) {
             throw new RuntimeException('Selecione uma pessoa diferente da responsável atual.');
         }
 
@@ -261,11 +263,11 @@ class ScheduleGeneratorService
             throw new RuntimeException('O funcionário selecionado está em férias nesta data.');
         }
 
-        return DB::transaction(function () use ($duty, $replacement, $originalEmployee, $date): CoffeeDuty {
+        return DB::transaction(function () use ($duty, $replacement, $originalEmployee, $coveredEmployee, $date): CoffeeDuty {
             $previousReplacementId = $duty->employee_id;
 
-            if ($previousReplacementId !== null && $previousReplacementId !== $originalEmployee->id) {
-                $this->removePendingCounterpartSwap($date, $originalEmployee, $previousReplacementId);
+            if ($previousReplacementId !== null && $previousReplacementId !== $coveredEmployee->id) {
+                $this->removePendingCounterpartSwap($date, $coveredEmployee, $previousReplacementId);
             }
 
             $targetEntry = $this->findNextNaturalDutyForEmployee($replacement, $date);
@@ -281,13 +283,14 @@ class ScheduleGeneratorService
                 throw new RuntimeException('A próxima data desse funcionário já possui uma troca registrada.');
             }
 
-            $this->recordCounterpartSwap($targetDate, $originalEmployee, $replacement, $targetDuty);
+            $this->recordCounterpartSwap($targetDate, $coveredEmployee, $replacement, $targetDuty);
 
             $duty->update([
                 'original_employee_id' => $originalEmployee->id,
+                'covered_employee_id' => $coveredEmployee->id === $originalEmployee->id ? null : $coveredEmployee->id,
                 'employee_id' => $replacement->id,
                 'status' => CoffeeDuty::STATUS_SCHEDULED,
-                'notes' => trim(($duty->notes ? $duty->notes.PHP_EOL : '').'Troca registrada em '.now()->format('d/m/Y H:i').' com '.$replacement->name.'. '.$originalEmployee->name.' assumiu o dia de '.$replacement->name.' em '.$targetDate->format('d/m/Y').'.'),
+                'notes' => trim(($duty->notes ? $duty->notes.PHP_EOL : '').'Troca registrada em '.now()->format('d/m/Y H:i').' com '.$replacement->name.'. '.$coveredEmployee->name.' assumiu o dia de '.$replacement->name.' em '.$targetDate->format('d/m/Y').'.'),
             ]);
 
             return $duty->refresh()->load(['employee', 'originalEmployee']);
@@ -296,7 +299,9 @@ class ScheduleGeneratorService
 
     public function ensureSwapCounterpart(CoffeeDuty $duty): void
     {
-        if ($duty->employee_id === null || $duty->original_employee_id === null || $duty->employee_id === $duty->original_employee_id) {
+        $coveredEmployeeId = $duty->covered_employee_id ?? $duty->original_employee_id;
+
+        if ($duty->employee_id === null || $coveredEmployeeId === null || $duty->employee_id === $coveredEmployeeId) {
             return;
         }
 
@@ -304,7 +309,7 @@ class ScheduleGeneratorService
             return;
         }
 
-        $originalEmployee = $duty->originalEmployee ?? Employee::find($duty->original_employee_id);
+        $originalEmployee = Employee::find($coveredEmployeeId);
         $replacement = $duty->employee ?? Employee::find($duty->employee_id);
 
         if ($originalEmployee === null || $replacement === null || ! $replacement->active) {
@@ -383,6 +388,20 @@ class ScheduleGeneratorService
         return $duty->original_employee_id ?? $duty->employee_id;
     }
 
+    private function coveredEmployeeIdForSwap(CoffeeDuty $duty): ?int
+    {
+        if ($duty->covered_employee_id !== null) {
+            return $duty->covered_employee_id;
+        }
+
+        $isRepayment = $duty->employee_id !== null
+            && $duty->original_employee_id !== null
+            && $duty->employee_id !== $duty->original_employee_id
+            && $this->hasPreviousMirrorSwap($duty);
+
+        return $isRepayment ? $duty->employee_id : $this->queueEmployeeIdForDuty($duty);
+    }
+
     private function findNextNaturalDutyForEmployee(Employee $employee, CarbonInterface $afterDate): ?array
     {
         $start = Carbon::parse($afterDate)->addDay()->startOfDay();
@@ -442,7 +461,11 @@ class ScheduleGeneratorService
         return CoffeeDuty::query()
             ->whereDate('duty_date', '<', $duty->duty_date->toDateString())
             ->where('employee_id', $duty->original_employee_id)
-            ->where('original_employee_id', $duty->employee_id)
+            ->where(fn ($query) => $query
+                ->where('covered_employee_id', $duty->employee_id)
+                ->orWhere(fn ($query) => $query
+                    ->whereNull('covered_employee_id')
+                    ->where('original_employee_id', $duty->employee_id)))
             ->exists();
     }
 
@@ -450,7 +473,7 @@ class ScheduleGeneratorService
     {
         return CoffeeDuty::query()
             ->whereDate('duty_date', '>', $duty->duty_date->toDateString())
-            ->where('employee_id', $duty->original_employee_id)
+            ->where('employee_id', $duty->covered_employee_id ?? $duty->original_employee_id)
             ->where('original_employee_id', $duty->employee_id)
             ->exists();
     }

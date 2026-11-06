@@ -289,6 +289,71 @@ class ScheduleRulesTest extends TestCase
         $this->assertSame(['Carlos', 'Bruno', 'Ana', 'Dora', 'Ana'], $entries->pluck('employee.name')->all());
     }
 
+    public function test_it_passes_the_debt_to_who_was_repaying_when_a_repayment_day_is_swapped(): void
+    {
+        Carbon::setTestNow('2026-06-10 09:00:00');
+        $ana = $this->employee('Ana', 1);
+        $this->employee('Bruno', 2);
+        $carlos = $this->employee('Carlos', 3);
+        $dora = $this->employee('Dora', 4);
+
+        $schedule = $this->schedule();
+        $schedule->swapDutyWith($schedule->ensureDutyForDate(Carbon::parse('2026-06-10')), $carlos);
+
+        Carbon::setTestNow('2026-06-12 09:00:00');
+        $repayment = $schedule->ensureDutyForDate(Carbon::parse('2026-06-12'));
+        $this->assertSame($ana->id, $repayment->employee_id);
+
+        $swapped = $schedule->swapDutyWith($repayment, $dora);
+
+        $this->assertSame($dora->id, $swapped->employee_id);
+        $this->assertSame($carlos->id, $swapped->original_employee_id);
+        $this->assertSame($ana->id, $swapped->covered_employee_id);
+
+        $counterpart = CoffeeDuty::whereDate('duty_date', '2026-06-15')->firstOrFail();
+        $this->assertSame($ana->id, $counterpart->employee_id);
+        $this->assertSame($dora->id, $counterpart->original_employee_id);
+
+        Carbon::setTestNow('2026-06-15 09:00:00');
+        $schedule->ensureDutyForDate(Carbon::parse('2026-06-15'));
+
+        $this->assertFalse(CoffeeDuty::whereDate('duty_date', '>', '2026-06-15')->exists());
+
+        $entries = $schedule->generate(Carbon::parse('2026-06-10'), Carbon::parse('2026-06-18'));
+
+        $this->assertSame(['Carlos', 'Bruno', 'Dora', 'Ana', 'Ana', 'Bruno', 'Carlos'], $entries->pluck('employee.name')->all());
+
+        Carbon::setTestNow();
+    }
+
+    public function test_it_moves_the_debt_when_a_swapped_repayment_day_is_swapped_again(): void
+    {
+        Carbon::setTestNow('2026-06-10 09:00:00');
+        $ana = $this->employee('Ana', 1);
+        $bruno = $this->employee('Bruno', 2);
+        $carlos = $this->employee('Carlos', 3);
+        $dora = $this->employee('Dora', 4);
+
+        $schedule = $this->schedule();
+        $schedule->swapDutyWith($schedule->ensureDutyForDate(Carbon::parse('2026-06-10')), $carlos);
+
+        Carbon::setTestNow('2026-06-12 09:00:00');
+        $repayment = $schedule->swapDutyWith($schedule->ensureDutyForDate(Carbon::parse('2026-06-12')), $dora);
+        $schedule->swapDutyWith($repayment, $bruno);
+
+        $this->assertFalse(CoffeeDuty::whereDate('duty_date', '2026-06-15')->exists());
+
+        $counterpart = CoffeeDuty::whereDate('duty_date', '2026-06-17')->firstOrFail();
+        $this->assertSame($ana->id, $counterpart->employee_id);
+        $this->assertSame($bruno->id, $counterpart->original_employee_id);
+
+        $entries = $schedule->generate(Carbon::parse('2026-06-10'), Carbon::parse('2026-06-18'));
+
+        $this->assertSame(['Carlos', 'Bruno', 'Bruno', 'Dora', 'Ana', 'Ana', 'Carlos'], $entries->pluck('employee.name')->all());
+
+        Carbon::setTestNow();
+    }
+
     public function test_it_rejects_selected_employee_on_vacation_for_swap(): void
     {
         Carbon::setTestNow('2026-06-10 09:00:00');
